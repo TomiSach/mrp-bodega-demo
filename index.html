@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MRP Cloud — Bodega Malbec Reserva</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col justify-between">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-10">
+        <div class="max-w-3xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2.5">
+                <span class="text-2xl">🍷</span>
+                <div>
+                    <h1 class="text-base font-bold text-white leading-tight">MRP Bodega Reserva</h1>
+                    <p class="text-[11px] text-indigo-400 font-mono">Simulador de Explosión de Materiales (BOM)</p>
+                </div>
+            </div>
+            <span class="text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-2.5 py-1 rounded-full">
+                ● Live Cloud
+            </span>
+        </div>
+    </header>
+
+    <!-- Main App -->
+    <main class="max-w-3xl w-full mx-auto px-4 py-6 space-y-6 flex-grow">
+
+        <!-- Entrada MPS -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-start">
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-400">1. Entrada: MPS (Plan Maestro)</span>
+                    <h2 class="text-lg font-bold text-white">Pedido Comercial — Vino Malbec 750ml</h2>
+                </div>
+                <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg font-mono">1 Caja = 6 Botellas</span>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex justify-between text-sm">
+                    <label for="cajas-input" class="text-slate-300 font-medium">Cantidad de Cajas a producir:</label>
+                    <span id="cajas-label" class="font-bold text-indigo-400 text-base">1.000 cajas (6.000 botellas)</span>
+                </div>
+                <input id="cajas-input" type="range" min="100" max="2000" step="50" value="1000"
+                    class="w-full accent-indigo-500 cursor-pointer h-2 bg-slate-800 rounded-lg">
+                <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+                    <span>100 cajas</span>
+                    <span>1.000 cajas (Caso Base)</span>
+                    <span>2.000 cajas</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Explosión del BOM e Inventario -->
+        <section class="space-y-3">
+            <div class="flex justify-between items-end px-1">
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-400">2. Proceso: Explosión BOM vs. Stock</span>
+                    <h2 class="text-lg font-bold text-white">Requerimientos Netos de Insumos</h2>
+                </div>
+                <button onclick="resetStock()" class="text-xs text-slate-400 hover:text-white underline cursor-pointer">
+                    Restaurar Stock Base
+                </button>
+            </div>
+
+            <div id="bom-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Se renderiza dinámicamente con JS -->
+            </div>
+        </section>
+
+        <!-- Salidas Automáticas del MRP -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-400">3. Salidas del Sistema (Outputs)</span>
+                <h2 class="text-lg font-bold text-white">Órdenes Generadas Automáticamente</h2>
+            </div>
+
+            <div id="outputs-container" class="space-y-3">
+                <!-- Alertas y Órdenes -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+        Demostración Académica — Economía y Organización Industrial (UCEL) • Tomás Sacchini
+    </footer>
+
+    <script>
+        // Base de datos simulada de Inventario y BOM (por botella / caja)
+        const initialInventory = [
+            { id: 'botella', name: 'Botella Vidrio Bordelesa', unit: 'un.', perBox: 6, stock: 6500, leadTime: 7, supplier: 'Cristalería Rosario' },
+            { id: 'corcho', name: 'Corcho Natural Alcornoque', unit: 'un.', perBox: 6, stock: 2000, leadTime: 12, supplier: 'Corchos del Sur' },
+            { id: 'etiqueta', name: 'Set Etiqueta + Contraetiqueta', unit: 'sets', perBox: 6, stock: 8000, leadTime: 5, supplier: 'Gráfica Cuyo' },
+            { id: 'capsula', name: 'Cápsula Termocontraíble', unit: 'un.', perBox: 6, stock: 7200, leadTime: 6, supplier: 'Insumos Enológicos' },
+            { id: 'caja', name: 'Caja Cartón Corrugado (x6)', unit: 'un.', perBox: 1, stock: 1200, leadTime: 4, supplier: 'Cartonera del Litoral' },
+            { id: 'vino', name: 'Vino Malbec en Tanque', unit: 'litros', perBox: 4.5, stock: 5000, leadTime: 15, supplier: 'Bodega Propia (Cava)' }
+        ];
+
+        let inventory = JSON.parse(JSON.stringify(initialInventory));
+        const slider = document.getElementById('cajas-input');
+        const cajasLabel = document.getElementById('cajas-label');
+        const bomList = document.getElementById('bom-list');
+        const outputsContainer = document.getElementById('outputs-container');
+
+        function formatNum(n) {
+            return n.toLocaleString('es-AR');
+        }
+
+        function updateMRP() {
+            const cajas = parseInt(slider.value);
+            const botellas = cajas * 6;
+            cajasLabel.textContent = `${formatNum(cajas)} cajas (${formatNum(botellas)} botellas)`;
+
+            bomList.innerHTML = '';
+            let purchaseOrders = [];
+
+            inventory.forEach(item => {
+                const required = Math.ceil(cajas * item.perBox);
+                const netShortage = required - item.stock;
+                const isShort = netShortage > 0;
+
+                if (isShort) {
+                    const safetyStock = Math.ceil(required * 0.10); // 10% stock de seguridad
+                    purchaseOrders.push({
+                        ...item,
+                        required,
+                        toBuy: netShortage + safetyStock,
+                        shortage: netShortage
+                    });
+                }
+
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-xl border transition ${isShort ? 'bg-rose-950/20 border-rose-800/60' : 'bg-slate-900/90 border-slate-800'}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-bold text-sm text-slate-100">${item.name}</h3>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isShort ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                            ${isShort ? 'FALTANTE' : 'STOCK OK'}
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                        <div class="bg-slate-950/60 p-2 rounded-lg">
+                            <span class="text-slate-500 block text-[10px]">Necesario (BOM)</span>
+                            <span class="text-slate-200 font-bold">${formatNum(required)} ${item.unit}</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-2 rounded-lg">
+                            <span class="text-slate-500 block text-[10px]">En Depósito</span>
+                            <span class="${isShort ? 'text-rose-400' : 'text-emerald-400'} font-bold">${formatNum(item.stock)} ${item.unit}</span>
+                        </div>
+                    </div>
+                `;
+                bomList.appendChild(card);
+            });
+
+            // Renderizar Salidas
+            let outputsHTML = '';
+
+            // 1. Órdenes de Compra / Alarmas
+            if (purchaseOrders.length > 0) {
+                purchaseOrders.forEach(po => {
+                    const urgent = po.leadTime >= 10;
+                    outputsHTML += `
+                        <div class="p-3.5 rounded-xl border ${urgent ? 'bg-amber-950/30 border-amber-700/60' : 'bg-indigo-950/30 border-indigo-800/60'} flex items-start gap-3">
+                            <span class="text-xl">${urgent ? '🚨' : '🛒'}</span>
+                            <div class="text-xs space-y-1">
+                                <div class="font-bold ${urgent ? 'text-amber-300' : 'text-indigo-300'} uppercase tracking-wide">
+                                    ${urgent ? 'Alarma Crítica + Orden de Compra Urgente' : 'Orden de Compra Automática'}
+                                </div>
+                                <p class="text-slate-200">
+                                    Pedir <strong>${formatNum(po.toBuy)} ${po.unit}</strong> de <strong>${po.name}</strong> a <em>${po.supplier}</em> (Faltante neto: ${formatNum(po.shortage)} + 10% seg.).
+                                </p>
+                                <p class="text-slate-400 font-mono text-[11px]">
+                                    ⏱ Lead Time proveedor: ${po.leadTime} días ${urgent ? '— ¡Pedir HOY para no frenar línea!' : ''}
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                outputsHTML += `
+                    <div class="p-3.5 rounded-xl border bg-emerald-950/20 border-emerald-800/50 flex items-center gap-3 text-xs text-emerald-300">
+                        <span class="text-lg">✅</span>
+                        <span>Inventario suficiente para cubrir el 100% de la explosión BOM sin emitir órdenes de compra.</span>
+                    </div>
+                `;
+            }
+
+            // 2. Orden de Trabajo (Taller)
+            const hoursNeeded = Math.ceil(botellas / 500); // 500 botellas/hora
+            outputsHTML += `
+                <div class="p-3.5 rounded-xl border bg-slate-950 border-slate-800 flex items-start gap-3">
+                    <span class="text-xl">⚙️</span>
+                    <div class="text-xs space-y-1">
+                        <div class="font-bold text-emerald-400 uppercase tracking-wide">Orden de Trabajo #OT-2026 (Línea Embotellado)</div>
+                        <p class="text-slate-300">
+                            Programar <strong>${hoursNeeded} horas</strong> de máquina (Lavadora → Llenadora → Encorchadora → Etiquetadora) con 4 operarios asignados.
+                        </p>
+                        <p class="text-slate-500 font-mono text-[11px]">
+                            📋 Planilla Op.: Presión encorchado 1.8 bar | Temp. vino 16°C
+                        </p>
+                    </div>
+                </div>
+            `;
+
+            outputsContainer.innerHTML = outputsHTML;
+        }
+
+        function resetStock() {
+            inventory = JSON.parse(JSON.stringify(initialInventory));
+            slider.value = 1000;
+            updateMRP();
+        }
+
+        slider.addEventListener('input', updateMRP);
+        updateMRP();
+    </script>
+</body>
+</html>
